@@ -1,6 +1,6 @@
 # PULSE — Adaptive Reaction Timing Instrument
 
-[![Live Demo](https://img.shields.io/badge/play-live-4f8fff)](https://YOUR_USERNAME.github.io/pulse-game/)
+[![Live Demo](https://pixelpandemonium-10.github.io/Pulse-v9.6/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A precision rhythm game with real-time statistical calibration.
@@ -8,7 +8,7 @@ Tap as the ring closes — the adaptive window scales to your personal
 reaction-time distribution, maintaining challenge at the edge of your
 ability.
 
-[Play it now →](https://YOUR_USERNAME.github.io/pulse-game/)
+[Play it now →](https://pixelpandemonium-10.github.io/Pulse-v9.6/)
 
 ---
 
@@ -57,6 +57,21 @@ and excluded from spread estimation.
 - **Responsive layout.** CSS Grid with breakpoint at 720 px.
 - **Persistence.** Personal best stored in `localStorage`
   (`pulse3_best` key).
+
+  ---
+
+  ## Future Work
+
+| Priority | Item | Notes |
+|----------|------|-------|
+| **Bug** | Fix `best` score persistence | `Math.max` assignment order issue — one-line fix |
+| **Feature** | Web Audio API integration | Tone.js or native oscillator for beat cues |
+| **Feature** | Cross-session statistics | Aggregate reaction times across sessions |
+| **Feature** | Export session data | JSON/CSV of raw timing errors for external analysis |
+| **Polish** | Reduced motion preference | Respect `prefers-reduced-motion` media query |
+
+---
+
 
 ### Browser Requirements
 
