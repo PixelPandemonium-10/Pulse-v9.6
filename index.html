@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PULSE — adaptive reaction instrument</title>
+<style>
+  :root {
+    --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', 'Liberation Mono', monospace;
+    --font-sans: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+</style>
+<style>
+:root {
+  --bg:#06080d; --surface:#0c0f17; --border:#141928;
+  --text:#c8d0e0; --dim:#374155; --dim2:#1a2030;
+  --accent:#4f8fff; --accent-g:rgba(79,143,255,0.15);
+  --perfect:#a78bfa; --good:#38bdf8;
+  --miss:#f43f5e; --gold:#f59e0b; --green:#34d399;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:var(--font-sans);overflow:hidden;touch-action:manipulation;}
+
+#bgCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;}
+
+#app{position:relative;z-index:1;height:100%;display:grid;
+  grid-template-columns:1fr 240px;grid-template-rows:52px 1fr 56px;}
+@media(max-width:720px){
+  #app{grid-template-columns:1fr;grid-template-rows:48px 1fr auto 52px;}
+  #statsPanel{border-left:none;border-top:1px solid var(--border);
+    grid-row:3;grid-column:1;max-height:180px;overflow-y:auto;}
+  #footer{grid-row:4;grid-column:1;}
+  #gameCanvas{width:min(68vw,280px)!important;height:min(68vw,280px)!important;}
+}
+
+#header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;border-bottom:1px solid var(--border);background:var(--surface);}
+.wordmark{font-family:var(--font-mono);font-size:11px;font-weight:500;
+  letter-spacing:0.2em;color:var(--accent);text-transform:uppercase;}
+.wordmark span{color:var(--dim);font-weight:300;}
+.header-right{display:flex;align-items:center;gap:18px;
+  font-family:var(--font-mono);font-size:10px;color:var(--dim);letter-spacing:0.08em;}
+.status-dot{width:5px;height:5px;border-radius:50%;background:var(--dim);
+  display:inline-block;margin-right:5px;transition:all 0.3s;}
+.status-dot.live{background:var(--green);box-shadow:0 0 6px var(--green);
+  animation:blink 1.8s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.35}}
+
+#stageWrap{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;position:relative;overflow:visible;
+  min-height:0;}
+
+#hudTop{position:absolute;top:16px;left:0;right:0;
+  display:flex;justify-content:space-between;padding:0 24px;}
+.hb{display:flex;flex-direction:column;gap:1px;}
+.hb.r{align-items:flex-end;}
+.hl{font-family:var(--font-mono);font-size:9px;letter-spacing:0.16em;
+  text-transform:uppercase;color:var(--dim);}
+.hv{font-family:var(--font-mono);font-size:26px;font-weight:500;
+  color:var(--text);line-height:1;font-variant-numeric:tabular-nums;transition:color 0.2s;}
+.hv.hot{color:var(--gold);}
+
+#gameCanvas{display:block;width:min(72vw,320px);height:min(72vw,320px);touch-action:none;max-width:100%;}
+
+#grade{position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  font-family:var(--font-mono);font-size:10px;font-weight:500;
+  letter-spacing:0.18em;text-transform:uppercase;pointer-events:none;opacity:0;}
+#grade.gp{animation:gfp 0.55s ease-out forwards;color:var(--perfect);}
+#grade.gg{animation:gfg 0.5s ease-out forwards;color:var(--good);}
+#grade.gm{animation:gfm 0.5s ease-out forwards;color:var(--miss);}
+@keyframes gfp{0%{opacity:0;transform:translate(-50%,-50%) scale(0.7) translateY(6px);}
+  20%{opacity:1;transform:translate(-50%,-50%) scale(1.05);}
+  100%{opacity:0;transform:translate(-50%,-50%) translateY(-22px);}}
+@keyframes gfg{0%{opacity:0;transform:translate(-50%,-50%) scale(0.85);}
+  20%{opacity:1;transform:translate(-50%,-50%) scale(1);}
+  100%{opacity:0;transform:translate(-50%,-50%) translateY(-16px);}}
+@keyframes gfm{0%{opacity:0;}15%{opacity:1;}
+  100%{opacity:0;transform:translate(-50%,-50%) translateY(-10px);}}
+
+#pbarWrap{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+  width:min(260px,68vw);display:flex;flex-direction:column;align-items:center;gap:3px;}
+#pbarLabel{font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--dim);}
+#pbarTrack{width:100%;height:2px;background:var(--border);border-radius:1px;overflow:hidden;}
+#pbarFill{height:100%;width:0%;background:var(--good);border-radius:1px;
+  transition:width 0.5s ease,background 0.4s;box-shadow:0 0 6px var(--good);}
+
+#statsPanel{border-left:1px solid var(--border);background:var(--surface);
+  display:flex;flex-direction:column;overflow:hidden;padding:0;}
+
+.sp-section{padding:14px 16px;border-bottom:1px solid var(--border);}
+.sp-title{font-family:var(--font-mono);font-size:9px;letter-spacing:0.16em;
+  text-transform:uppercase;color:var(--dim);margin-bottom:10px;}
+
+#gaussCanvas{display:block;width:100%;height:72px;margin-top:4px;}
+
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:6px;font-family:var(--font-mono);font-size:11px;}
+.stat-row:last-child{margin-bottom:0;}
+.stat-row .sk{color:var(--dim);font-size:10px;letter-spacing:0.04em;}
+.stat-row .sv{color:var(--text);font-weight:500;}
+.sv.blue{color:var(--accent);}
+.sv.purple{color:var(--perfect);}
+.sv.green{color:var(--green);}
+.sv.gold{color:var(--gold);}
+
+.mle-box{background:var(--bg);border:1px solid var(--border);border-radius:3px;
+  padding:10px 12px;font-family:var(--font-mono);font-size:9px;
+  color:var(--dim);line-height:1.8;margin-top:8px;}
+.mle-box .eq{color:var(--accent);display:block;margin:2px 0;}
+
+#histCanvas{display:block;width:100%;height:56px;margin-top:4px;}
+
+.diff-track{width:100%;height:4px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden;}
+.diff-fill{height:100%;border-radius:2px;transition:width 0.6s ease,background 0.4s;
+  background:linear-gradient(90deg,var(--good),var(--perfect));}
+
+#footer{grid-column:1/-1;display:flex;align-items:center;justify-content:center;
+  gap:20px;border-top:1px solid var(--border);padding:0 20px;background:var(--surface);}
+.fp{font-family:var(--font-mono);font-size:10px;color:var(--dim);
+  letter-spacing:0.08em;display:flex;align-items:center;gap:6px;}
+.key{border:1px solid var(--dim2);border-radius:3px;padding:2px 7px;
+  font-size:9px;color:var(--dim);background:var(--bg);}
+#lifepips{display:flex;gap:5px;}
+.pip{width:7px;height:7px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 5px var(--accent);transition:all 0.3s;}
+.pip.dead{background:var(--border);box-shadow:none;}
+
+#overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  background:rgba(6,8,13,0.93);backdrop-filter:blur(10px);
+  padding:28px;text-align:center;gap:0;}
+#overlay.hidden{display:none;}
+.ov-eyebrow{font-family:var(--font-mono);font-size:9px;letter-spacing:0.22em;
+  color:var(--dim);text-transform:uppercase;margin-bottom:8px;}
+.ov-title{font-family:var(--font-mono);font-size:clamp(30px,8vw,54px);
+  font-weight:500;color:var(--text);letter-spacing:-0.02em;line-height:1;margin-bottom:6px;}
+.ov-sub{font-size:12px;font-weight:300;color:var(--dim);line-height:1.7;
+  margin-bottom:36px;max-width:320px;}
+.ov-score{font-family:var(--font-mono);font-size:clamp(48px,13vw,84px);
+  font-weight:300;color:var(--accent);line-height:1;letter-spacing:-0.03em;
+  text-shadow:0 0 40px rgba(79,143,255,0.3);margin-bottom:4px;}
+.ov-slabel{font-family:var(--font-mono);font-size:9px;letter-spacing:0.18em;
+  color:var(--dim);text-transform:uppercase;margin-bottom:6px;}
+.ov-best{font-family:var(--font-mono);font-size:11px;color:var(--gold);
+  letter-spacing:0.06em;margin-bottom:4px;}
+.ov-stats{display:flex;gap:24px;margin-bottom:16px;}
+.ov-st{display:flex;flex-direction:column;gap:2px;align-items:center;}
+.ov-sv{font-family:var(--font-mono);font-size:18px;color:var(--text);}
+.ov-sl{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:0.1em;}
+.ov-insight{font-family:var(--font-mono);font-size:10px;color:var(--dim);
+  line-height:1.7;max-width:340px;margin-bottom:28px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:3px;padding:10px 14px;text-align:left;}
+.ov-insight .hi{color:var(--accent);}
+#actionBtn{font-family:var(--font-mono);font-size:11px;font-weight:500;
+  letter-spacing:0.14em;text-transform:uppercase;background:none;
+  border:1px solid var(--accent);color:var(--accent);padding:13px 42px;
+  border-radius:2px;cursor:pointer;transition:background 0.15s,box-shadow 0.15s;}
+#actionBtn:hover{background:rgba(79,143,255,0.1);box-shadow:0 0 20px rgba(79,143,255,0.2);}
+</style>
+<base target="_blank">
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div id="app">
+
+  <div id="header">
+    <div class="wordmark">Pulse <span>/ adaptive</span></div>
+    <div class="header-right">
+      <span><span class="status-dot" id="sDot"></span><span id="sTxt">idle</span></span>
+      <span id="bpmEl">— bpm</span>
+      <span id="regimeEl" style="color:var(--dim);font-size:9px;">slow regime</span>
+    </div>
+  </div>
+
+  <div id="stageWrap">
+    <div id="hudTop">
+      <div class="hb">
+        <div class="hl">score</div>
+        <div class="hv" id="scoreEl">0</div>
+      </div>
+      <div class="hb r">
+        <div class="hl" id="strLabel">streak</div>
+        <div class="hv" id="strEl">0</div>
+      </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="grade"></div>
+    <div id="pbarWrap">
+      <div id="pbarLabel">precision — 0%</div>
+      <div id="pbarTrack"><div id="pbarFill"></div></div>
+    </div>
+  </div>
+
+  <div id="statsPanel">
+    <div class="sp-section">
+      <div class="sp-title">// reaction model  <span style="color:var(--accent);font-size:8px">log-normal fit</span></div>
+      <canvas id="gaussCanvas"></canvas>
+      <div class="mle-box">
+        <span class="eq" id="muEq">bias = — ms &nbsp;(systematic tendency)</span>
+        <span class="eq" id="sigEq">σ_log = — &nbsp;(log-normal spread)</span>
+        <span class="eq" id="winEq">window = — ms &nbsp;(cycle-fraction capped)</span>
+        <span class="eq" id="rateEq">hit rate target ≈ 85% (empirical quantile, n≥10)</span>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-title">// timing error distribution</div>
+      <canvas id="histCanvas"></canvas>
+    </div>
+
+    <div class="sp-section" style="flex:1">
+      <div class="sp-title">// session stats</div>
+      <div class="stat-row"><span class="sk">samples (n)</span><span class="sv blue" id="nEl">0</span></div>
+      <div class="stat-row"><span class="sk">mean bias</span><span class="sv purple" id="muEl">—</span></div>
+      <div class="stat-row"><span class="sk">log-spread</span><span class="sv purple" id="sdEl">—</span></div>
+      <div class="stat-row"><span class="sk">window size</span><span class="sv green" id="winEl">—</span></div>
+      <div class="stat-row"><span class="sk">regime</span><span class="sv blue" id="regimeStat">slow</span></div>
+      <div class="stat-row"><span class="sk">difficulty</span><span class="sv gold" id="diffEl">calibrating</span></div>
+      <div class="diff-track"><div class="diff-fill" id="diffFill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div id="footer">
+    <div class="fp"><span class="key">space</span> or tap to time</div>
+    <div id="lifepips">
+      <div class="pip" id="p0"></div>
+      <div class="pip" id="p1"></div>
+      <div class="pip" id="p2"></div>
+    </div>
+    <div class="fp"><span class="key">esc</span> end session</div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="ov-eyebrow" id="ovEye">adaptive reaction timing instrument</div>
+  <div class="ov-title">PULSE</div>
+  <div class="ov-sub" id="ovSub">
+    Tap as the ring closes. The window adapts in real time using
+    nonparametric quantiles of your reaction time distribution —
+    keeping you at exactly 85% accuracy, always at your personal limit.
+  </div>
+  <div id="ovEnd" style="display:none">
+    <div class="ov-score" id="ovScore">0</div>
+    <div class="ov-slabel">final score</div>
+    <div class="ov-best" id="ovBest"></div>
+    <div class="ov-stats">
+      <div class="ov-st"><div class="ov-sv" id="ovP">0</div><div class="ov-sl">perfect</div></div>
+      <div class="ov-st"><div class="ov-sv" id="ovG">0</div><div class="ov-sl">good</div></div>
+      <div class="ov-st"><div class="ov-sv" id="ovM">0</div><div class="ov-sl">miss</div></div>
+    </div>
+    <div class="ov-insight" id="ovInsight"></div>
+  </div>
+  <button id="actionBtn">begin session</button>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   POST-REVIEW FIXES v6.0  (Professor Round 4 — A+ push)
+   ─────────────────────────────────────────────────────────────
+   1. add() tags samples by this.currentRegime (not raw cycleDuration)
+   2. setRegime() invalidates cache + recomputes on regime switch
+   3. Sanity suite wrapped in DEV guard; backup/restore isolation
+   4. NaN guard test exercises empirical branch (n≥10)
+   5. Personal best: score > best (strict, not ≥)
+   ═══════════════════════════════════════════════════════════════ */
+
+const DEV = (typeof __DEV__ !== 'undefined' && __DEV__) || false;
+function devAssert(cond, msg){
+  if(DEV && !cond){
+    console.error('[Stats DEV ASSERT] ' + msg);
+    throw new Error(msg);
+  }
+}
+
+const _memStore = {};
+function lsGet(k, d){
+  try { const v = window.localStorage.getItem(k); return v !== null ? v : d; }
+  catch { return (k in _memStore) ? _memStore[k] : d; }
+}
+function lsSet(k, v){
+  try { window.localStorage.setItem(k, v); }
+  catch { _memStore[k] = v; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATISTICAL ENGINE  v6.0
+//
+// DESIGN CONTRACT:
+// • Samples are |error| magnitudes from taps inside the adaptive
+//   window OR the grace zone (within 6% of cycle before window).
+// • Late responses (t >= 1.0) are treated as attention lapses and
+//   EXCLUDED from spread estimation.
+// • Extreme early responses (>6% of cycle before window) are
+//   treated as button-mashing and also excluded (censored).
+// • The adaptive window is the empirical 85th percentile of the
+//   last 20 in-regime magnitudes, capped to [4.5%, 22%] of cycle.
+//   Gated behind ≥10 relevant samples.
+// • Regime switching uses 60ms hysteresis (950/1050).
+// • Samples are tagged with the MODEL'S regime at ingestion time
+//   (this.currentRegime), NOT the raw cycleDuration. This ensures
+//   recompute() and the empirical filter are always consistent.
+// • On regime switch, the window cache is invalidated and the fit
+//   is recomputed immediately so the UI never shows stale data.
+// • Difficulty is a GAME-SIDE concern; Stats knows nothing about
+//   BPM, lives, or scoring.
+// ═══════════════════════════════════════════════════════════════
+const Stats = {
+  samples: [],
+  mu_y: 0,
+  sigma_y: 0,
+  bias: 0,
+  n: 0,
+  SCALE: 60,
+  MAX_SAMPLES: 80,
+  currentRegime: 'slow',
+
+  _cacheWin: null,
+  _cacheCd: -1,
+  _cacheN: -1,
+
+  transform(magnitude){
+    const s = this.SCALE;
+    return s * Math.log1p(magnitude / s);
+  },
+
+  // FIX #2: hysteresis with 60ms dead band + cache invalidation + recompute
+  setRegime(cycleDuration){
+    let changed = false;
+    if(this.currentRegime === 'slow' && cycleDuration < 950){
+      this.currentRegime = 'fast'; changed = true;
+    } else if(this.currentRegime === 'fast' && cycleDuration > 1050){
+      this.currentRegime = 'slow'; changed = true;
+    }
+    if(changed){
+      this._cacheWin = null;   // invalidate window cache
+      this.recompute();         // recompute fit for new regime immediately
+    }
+  },
+
+  // FIX #1: tag sample with this.currentRegime (model state), NOT raw cycleDuration
+  add(errMs, cycleDuration){
+    const mag = Math.abs(errMs);
+    this.samples.push({
+      err: errMs,
+      cycle: cycleDuration,
+      regime: this.currentRegime,  // ← model's regime at ingestion time
+      mag: mag,
+      y: this.transform(mag)
+    });
+    if(this.samples.length > this.MAX_SAMPLES) this.samples.shift();
+    this.n = this.samples.length;
+    this._cacheWin = null; // invalidate window cache on new data
+    this.recompute();
+  },
+
+  recompute(){
+    const n = this.samples.length;
+    if(n < 2){ this.mu_y = 0; this.sigma_y = 0; this.bias = 0; return; }
+
+    this.bias = this.samples.reduce((s, v) => s + v.err, 0) / n;
+
+    const relevant = this.samples.filter(s => s.regime === this.currentRegime);
+
+    if(relevant.length >= 3){
+      const m = relevant.reduce((a, b) => a + b.y, 0) / relevant.length;
+      const v = relevant.reduce((s, v) => s + (v.y - m) ** 2, 0) / (relevant.length - 1);
+      this.mu_y = m;
+      this.sigma_y = Math.sqrt(Math.max(0, v));
+    } else {
+      this.mu_y = 0; this.sigma_y = 0;
+    }
+  },
+
+  getWindowMs(cycleDuration){
+    if(this._cacheWin && this._cacheCd === cycleDuration && this._cacheN === this.n){
+      return this._cacheWin;
+    }
+
+    let result;
+
+    if(this.n < 5){
+      const size = cycleDuration * 0.22;
+      result = {size, frac: 0.22};
+    } else {
+      const relevant = this.samples.filter(s => s.regime === this.currentRegime);
+
+      if(relevant.length < 10){
+        const size = cycleDuration * 0.22;
+        result = {size, frac: 0.22};
+      } else {
+        const recent = relevant.slice(-20);
+        const mags = recent.map(s => s.mag).sort((a, b) => a - b);
+        const idx = Math.min(mags.length - 1, Math.floor(mags.length * 0.85));
+        const winMs = mags[idx];
+
+        const maxFrac = 0.22;
+        const minFrac = 0.045;
+        const maxMs   = cycleDuration * maxFrac;
+        const minMs   = cycleDuration * minFrac;
+
+        const size = Math.max(minMs, Math.min(maxMs, winMs));
+        result = {size, frac: size / cycleDuration};
+      }
+    }
+
+    if(!Number.isFinite(result.size)) result.size = cycleDuration * 0.22;
+    if(!Number.isFinite(result.frac)) result.frac = 0.22;
+
+    this._cacheWin = result;
+    this._cacheCd = cycleDuration;
+    this._cacheN = this.n;
+    return result;
+  },
+
+  pdf(m){
+    if(this.sigma_y < 0.01) return 0;
+    const y = this.transform(m);
+    const p = (1 / (this.sigma_y * Math.sqrt(2 * Math.PI))) *
+              Math.exp(-0.5 * ((y - this.mu_y) / this.sigma_y) ** 2);
+    const jac = this.SCALE / (this.SCALE + m);
+    return p * jac;
+  },
+
+  reset(){
+    this.samples = []; this.mu_y = 0; this.sigma_y = 0;
+    this.bias = 0; this.n = 0; this.currentRegime = 'slow';
+    this._cacheWin = null; this._cacheCd = -1; this._cacheN = -1;
+  }
+};
+
+// ── BACKGROUND CANVAS ──
+const bgC = document.getElementById('bgCanvas');
+const bgX = bgC.getContext('2d');
+let BW = 0, BH = 0, bgPhase = 0, bgAmp = 0, bgTarget = 0;
+function resizeBg(){
+  BW = bgC.width = window.innerWidth;
+  BH = bgC.height = window.innerHeight;
+}
+resizeBg();
+window.addEventListener('resize', resizeBg);
+function drawBg(){
+  bgX.clearRect(0, 0, BW, BH);
+  bgAmp += (bgTarget - bgAmp) * 0.06;
+  bgPhase += 0.01;
+  bgX.strokeStyle = 'rgba(20,25,40,0.85)';
+  bgX.lineWidth = 1;
+  const gs = 48;
+  for(let x = 0; x < BW; x += gs){ bgX.beginPath(); bgX.moveTo(x, 0); bgX.lineTo(x, BH); bgX.stroke(); }
+  for(let y = 0; y < BH; y += gs){ bgX.beginPath(); bgX.moveTo(0, y); bgX.lineTo(BW, y); bgX.stroke(); }
+  if(bgAmp > 1){
+    bgX.beginPath();
+    bgX.strokeStyle = `rgba(79,143,255,${Math.min(0.2, bgAmp * 0.005)})`;
+    bgX.lineWidth = 1.5;
+    const cy = BH * 0.5;
+    for(let x = 0; x <= BW; x += 2){
+      const t = x / BW;
+      const y = cy + Math.sin(t * Math.PI * 7 + bgPhase) * bgAmp
+                   + Math.sin(t * Math.PI * 2.3 + bgPhase * 0.6) * bgAmp * 0.35;
+      x === 0 ? bgX.moveTo(x, y) : bgX.lineTo(x, y);
+    }
+    bgX.stroke();
+  }
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ── GAME CANVAS ──
+const gc = document.getElementById('gameCanvas');
+const gx = gc.getContext('2d');
+const DPR = window.devicePixelRatio || 1;
+let GS = 0;
+function resizeGame(){
+  const stage = document.getElementById('stageWrap');
+  const sr = stage.getBoundingClientRect();
+  if(!sr.width || !sr.height) return;
+  const avail = Math.min(sr.width * 0.88, sr.height - 120);
+  const size = Math.max(160, Math.min(360, avail));
+  gc.style.width = size + 'px';
+  gc.style.height = size + 'px';
+  GS = size;
+  gc.width = Math.round(GS * DPR);
+  gc.height = Math.round(GS * DPR);
+  gx.resetTransform(); gx.scale(DPR, DPR);
+}
+
+// ── GAUSS CANVAS ──
+const gsc = document.getElementById('gaussCanvas');
+const gsx = gsc.getContext('2d');
+let GCW = 0, GCH = 0;
+function resizeGauss(){
+  const r = gsc.getBoundingClientRect();
+  if(!r.width) return;
+  GCW = r.width; GCH = r.height || 72;
+  gsc.width = GCW * DPR; gsc.height = GCH * DPR;
+  gsx.resetTransform(); gsx.scale(DPR, DPR);
+}
+
+// ── HIST CANVAS ──
+const hsc = document.getElementById('histCanvas');
+const hsx = hsc.getContext('2d');
+let HCW = 0, HCH = 0;
+function resizeHist(){
+  const r = hsc.getBoundingClientRect();
+  if(!r.width) return;
+  HCW = r.width; HCH = r.height || 56;
+  hsc.width = HCW * DPR; hsc.height = HCH * DPR;
+  hsx.resetTransform(); hsx.scale(DPR, DPR);
+}
+
+function resizeAll(){
+  resizeGame(); resizeGauss(); resizeHist();
+}
+resizeAll();
+
+let resizeTimer = null;
+if(typeof ResizeObserver !== 'undefined'){
+  const ro = new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resizeAll, 100);
+  });
+  ro.observe(document.getElementById('stageWrap'));
+  ro.observe(document.getElementById('statsPanel'));
+} else {
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resizeAll, 100);
+  });
+}
+
+// ── PARTICLE SYSTEM ──
+let parts = [];
+function spawnParts(cx, cy, color, n, spd){
+  for(let i = 0; i < n; i++){
+    const a = Math.random() * Math.PI * 2, s = spd * (0.4 + Math.random() * 0.6);
+    parts.push({x: cx, y: cy, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      r: 1.5 + Math.random() * 2.5, color, alpha: 1, decay: 0.032 + Math.random() * 0.04});
+  }
+}
+function spawnRing(cx, cy, color){
+  if(GS > 0) parts.push({ring: true, x: cx, y: cy, r: 18, maxR: GS * 0.36, color, alpha: 0.9, decay: 0.05});
+}
+
+// ── GAME STATE ──
+let running = false, score = 0, streak = 0, lives = 3;
+let best = parseInt(lsGet('pulse3_best', '0'), 10) || 0;
+let cycleDuration = 1500, cycleStart = 0, rafId = null;
+let resultLock = false, windowOpen = false;
+let perfects = 0, goods = 0, misses = 0;
+let looseStreak = 0;
+
+// ── DRAW GAME FRAME ──
+const TAU = Math.PI * 2;
+function safeArc(ctx, x, y, r, start, end, ccw){
+  if(!isFinite(r) || r <= 0 || !isFinite(x) || !isFinite(y)) return false;
+  ctx.arc(x, y, r, start, end, ccw || false);
+  return true;
+}
+function drawFrame(now){
+  if(!GS || GS <= 0) return;
+  if(DEV && (!Number.isFinite(now) || now < 0)){
+    console.error('[DEV] drawFrame received invalid timestamp:', now);
+    return;
+  }
+
+  const cx = GS / 2;
+  const cy = GS / 2;
+  gx.clearRect(0, 0, GS, GS);
+
+  [0.94, 0.86, 0.76].forEach((f, i) => {
+    if(cx * f <= 0) return;
+    gx.beginPath(); safeArc(gx, cx, cy, cx * f, 0, TAU);
+    gx.strokeStyle = `rgba(20,26,40,${0.5 + i * 0.15})`;
+    gx.lineWidth = 1; gx.stroke();
+  });
+
+  const tR = cx * 0.88;
+  for(let i = 0; i < 60; i++){
+    const a = (i / 60) * TAU - Math.PI / 2, maj = i % 5 === 0;
+    gx.beginPath();
+    gx.moveTo(cx + Math.cos(a) * (tR - (maj ? 8 : 4)), cy + Math.sin(a) * (tR - (maj ? 8 : 4)));
+    gx.lineTo(cx + Math.cos(a) * (tR + 1), cy + Math.sin(a) * (tR + 1));
+    gx.strokeStyle = maj ? 'rgba(79,143,255,0.22)' : 'rgba(79,143,255,0.07)';
+    gx.lineWidth = maj ? 1.5 : 1; gx.stroke();
+  }
+
+  if(running && !resultLock){
+    const elapsed = now - cycleStart;
+    const t = Math.min(elapsed / cycleDuration, 1);
+    const win = Stats.getWindowMs(cycleDuration);
+    const winFrac = win.size / cycleDuration;
+    windowOpen = t >= (1 - winFrac);
+
+    gx.beginPath(); safeArc(gx, cx, cy, tR, 0, TAU);
+    gx.strokeStyle = 'rgba(18,24,38,0.9)'; gx.lineWidth = 6; gx.stroke();
+
+    const inPerfect = t >= (1 - winFrac * 0.45);
+    const arcCol = inPerfect ? '#a78bfa' : windowOpen ? '#4f8fff' : '#4f8fff';
+    const glowCol = inPerfect ? 'rgba(167,139,250,0.5)' : 'rgba(79,143,255,0.28)';
+    gx.save();
+    gx.beginPath();
+    safeArc(gx, cx, cy, tR, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - t), false);
+    gx.strokeStyle = arcCol; gx.lineWidth = 6; gx.lineCap = 'round';
+    gx.shadowColor = glowCol; gx.shadowBlur = windowOpen ? 22 : 8;
+    gx.stroke(); gx.restore();
+
+    const la = -Math.PI / 2 + TAU * (1 - t);
+    const ldx = cx + Math.cos(la) * tR, ldy = cy + Math.sin(la) * tR;
+    gx.beginPath(); safeArc(gx, ldx, ldy, 4.5, 0, TAU);
+    gx.fillStyle = arcCol; gx.shadowColor = arcCol; gx.shadowBlur = 18;
+    gx.fill(); gx.shadowBlur = 0;
+
+    if(Stats.n >= 3){
+      gx.save();
+      gx.beginPath();
+      const wStart = -Math.PI / 2 + TAU * (1 - winFrac);
+      const wEnd = -Math.PI / 2 + TAU;
+      safeArc(gx, cx, cy, tR + 10, wStart, wEnd, false);
+      gx.strokeStyle = 'rgba(167,139,250,0.18)';
+      gx.lineWidth = 3; gx.lineCap = 'round'; gx.stroke();
+      gx.restore();
+    }
+
+    document.getElementById('bpmEl').textContent = Math.round(60000 / cycleDuration) + ' bpm';
+    document.getElementById('regimeEl').textContent = Stats.currentRegime + ' regime';
+    bgTarget = 25 + (1500 - cycleDuration) * 0.035;
+  }
+
+  const iR = cx * 0.42;
+  if(iR > 0){
+    const ig = gx.createRadialGradient(cx, cy, 0, cx, cy, iR);
+    ig.addColorStop(0, 'rgba(15,20,32,0.97)');
+    ig.addColorStop(1, 'rgba(9,12,20,0.99)');
+    gx.beginPath(); safeArc(gx, cx, cy, iR, 0, TAU);
+    gx.fillStyle = ig; gx.fill();
+    gx.strokeStyle = windowOpen ? 'rgba(79,143,255,0.45)' : 'rgba(18,24,38,0.8)';
+    gx.lineWidth = 1.5; gx.stroke();
+  }
+
+  gx.strokeStyle = 'rgba(79,143,255,0.1)'; gx.lineWidth = 1;
+  gx.beginPath(); gx.moveTo(cx - 10, cy); gx.lineTo(cx + 10, cy); gx.stroke();
+  gx.beginPath(); gx.moveTo(cx, cy - 10); gx.lineTo(cx, cy + 10); gx.stroke();
+
+  if(Stats.n >= 3 && iR > 0){
+    gx.beginPath(); safeArc(gx, cx, cy, iR + 4, 0, TAU);
+    gx.strokeStyle = 'rgba(167,139,250,0.12)'; gx.lineWidth = 2;
+    gx.setLineDash([4, 6]); gx.stroke(); gx.setLineDash([]);
+  }
+
+  for(let i = parts.length - 1; i >= 0; i--){
+    const p = parts[i];
+    if(p.ring){
+      p.r += (p.maxR - p.r) * 0.1; p.alpha *= (1 - p.decay);
+      gx.beginPath(); safeArc(gx, cx, cy, p.r, 0, TAU);
+      gx.strokeStyle = p.color; gx.globalAlpha = p.alpha;
+      gx.lineWidth = 2; gx.stroke(); gx.globalAlpha = 1;
+    } else {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.07; p.vx *= 0.95; p.vy *= 0.95;
+      p.alpha -= p.decay;
+      gx.beginPath(); safeArc(gx, p.x, p.y, p.r * p.alpha, 0, TAU);
+      gx.fillStyle = p.color; gx.globalAlpha = Math.max(0, p.alpha);
+      gx.fill(); gx.globalAlpha = 1;
+    }
+    if(p.alpha <= 0) parts.splice(i, 1);
+  }
+}
+
+// ── GAUSS CHART ──
+function drawGauss(){
+  if(!GCW) return;
+  gsx.clearRect(0, 0, GCW, GCH);
+  const range = 400;
+  const win = Stats.getWindowMs(cycleDuration);
+
+  if(Stats.n >= 3 && win.size > 0){
+    const wR = (win.size / range) * GCW;
+    gsx.fillStyle = 'rgba(167,139,250,0.10)';
+    gsx.fillRect(0, 0, Math.min(GCW, wR), GCH);
+    gsx.strokeStyle = 'rgba(167,139,250,0.35)';
+    gsx.lineWidth = 1; gsx.setLineDash([3, 4]);
+    gsx.beginPath(); gsx.moveTo(wR, 0); gsx.lineTo(wR, GCH); gsx.stroke();
+    gsx.setLineDash([]);
+  }
+
+  if(Stats.n < 3){
+    gsx.fillStyle = 'rgba(55,65,85,0.6)';
+    gsx.font = '10px monospace'; gsx.textAlign = 'center';
+    gsx.fillText('need 3+ samples', GCW / 2, GCH / 2 + 3);
+    return;
+  }
+
+  let maxP = 0;
+  for(let px = 0; px <= GCW; px += 2){
+    const m = (px / GCW) * range;
+    maxP = Math.max(maxP, Stats.pdf(m));
+  }
+  if(maxP <= 0) maxP = 1;
+
+  gsx.beginPath();
+  for(let px = 0; px <= GCW; px += 1){
+    const m = (px / GCW) * range;
+    const p = Stats.pdf(m);
+    const py = GCH - (p / maxP) * (GCH * 0.80) - GCH * 0.06;
+    px === 0 ? gsx.moveTo(px, py) : gsx.lineTo(px, py);
+  }
+  gsx.lineTo(GCW, GCH); gsx.lineTo(0, GCH); gsx.closePath();
+  const grad = gsx.createLinearGradient(0, 0, 0, GCH);
+  grad.addColorStop(0, 'rgba(79,143,255,0.18)');
+  grad.addColorStop(1, 'rgba(79,143,255,0.02)');
+  gsx.fillStyle = grad; gsx.fill();
+
+  gsx.beginPath();
+  for(let px = 0; px <= GCW; px += 1){
+    const m = (px / GCW) * range;
+    const p = Stats.pdf(m);
+    const py = GCH - (p / maxP) * (GCH * 0.80) - GCH * 0.06;
+    px === 0 ? gsx.moveTo(px, py) : gsx.lineTo(px, py);
+  }
+  gsx.strokeStyle = 'rgba(79,143,255,0.7)'; gsx.lineWidth = 1.5; gsx.stroke();
+
+  gsx.fillStyle = 'rgba(55,65,85,0.8)'; gsx.font = '8px monospace'; gsx.textAlign = 'center';
+  gsx.fillText('0', 8, GCH - 2);
+  gsx.fillText('200ms', GCW / 2, GCH - 2);
+  gsx.fillText('400ms', GCW - 12, GCH - 2);
+  gsx.fillText('|error| →', GCW - 24, 10);
+}
+
+// ── HISTOGRAM ──
+function drawHist(){
+  if(!HCW || Stats.samples.length < 2) return;
+  hsx.clearRect(0, 0, HCW, HCH);
+  const range = 300, bins = 20, binW = HCW / bins;
+  const counts = new Array(bins).fill(0);
+
+  for(const s of Stats.samples){
+    const bi = Math.floor((s.mag / range) * bins);
+    if(bi >= 0 && bi < bins) counts[bi]++;
+  }
+
+  const maxC = Math.max(...counts, 1);
+  const win = Stats.getWindowMs(cycleDuration);
+
+  for(let i = 0; i < bins; i++){
+    const h = (counts[i] / maxC) * (HCH * 0.88);
+    const m = (i / bins) * range;
+    const inWin = m < win.size;
+    hsx.fillStyle = inWin ? 'rgba(167,139,250,0.55)' : 'rgba(79,143,255,0.28)';
+    hsx.fillRect(i * binW + 1, HCH - h, binW - 2, h);
+  }
+}
+
+// ── STATS PANEL UPDATE ──
+function updateStatsPanel(){
+  const n = Stats.n;
+  document.getElementById('nEl').textContent = n;
+
+  if(n >= 2){
+    const win = Stats.getWindowMs(cycleDuration);
+
+    if(!Number.isFinite(win.size)) win.size = cycleDuration * 0.22;
+    if(!Number.isFinite(win.frac)) win.frac = 0.22;
+
+    if(DEV){
+      devAssert(Number.isFinite(win.size), 'win.size must be finite after guard');
+      devAssert(Number.isFinite(win.frac), 'win.frac must be finite after guard');
+    }
+
+    const bias = Stats.bias;
+    const sig = Stats.sigma_y;
+
+    document.getElementById('muEl').textContent = (bias >= 0 ? '+' : '') + bias.toFixed(1) + ' ms';
+    document.getElementById('sdEl').textContent = sig.toFixed(2);
+    document.getElementById('winEl').textContent = '≤' + win.size.toFixed(0) + ' ms';
+    document.getElementById('regimeStat').textContent = Stats.currentRegime;
+    document.getElementById('muEq').textContent =
+      'bias = ' + (bias >= 0 ? '+' : '') + bias.toFixed(1) + ' ms  (systematic tendency)';
+    document.getElementById('sigEq').textContent =
+      'σ_log = ' + sig.toFixed(2) + '  (log-normal spread)';
+    document.getElementById('winEq').textContent =
+      'window = ' + win.size.toFixed(0) + ' ms  (' + (win.frac * 100).toFixed(1) + '% of cycle)';
+    document.getElementById('rateEq').textContent =
+      'hit rate target ≈ 85% (empirical quantile, n≥10)';
+
+    let diff = 0;
+    if(n >= 5){
+      diff = Math.min(100, Math.max(0, (1 - win.frac / 0.22) * 100));
+    }
+    document.getElementById('diffEl').textContent =
+      n < 5 ? 'calibrating' :
+      diff < 40 ? 'easy' : diff < 60 ? 'moderate' : diff < 80 ? 'hard' : 'expert';
+    document.getElementById('diffFill').style.width = diff + '%';
+    document.getElementById('diffFill').style.background =
+      diff < 40 ? 'var(--good)' : diff < 70 ? 'var(--accent)' : 'var(--perfect)';
+  }
+
+  drawGauss();
+  drawHist();
+
+  const total = perfects + goods + misses;
+  const pct = total ? Math.round((perfects / total) * 100) : 0;
+  document.getElementById('pbarFill').style.width = pct + '%';
+  document.getElementById('pbarLabel').textContent = 'precision — ' + pct + '%';
+  document.getElementById('pbarFill').style.background =
+    pct >= 75 ? '#a78bfa' : pct >= 50 ? '#38bdf8' : 'var(--dim2)';
+}
+
+// ── GAME LOOP ──
+function gameLoop(now){
+  drawFrame(now);
+  if(running && !resultLock){
+    const t = (now - cycleStart) / cycleDuration;
+    if(t >= 1) handleResult('miss-late');
+    else rafId = requestAnimationFrame(gameLoop);
+  } else if(parts.length > 0){
+    rafId = requestAnimationFrame(gameLoop);
+  }
+}
+
+// ── GAME LOGIC ──
+function startGame(){
+  score = 0; streak = 0; lives = 3; cycleDuration = 1500;
+  perfects = 0; goods = 0; misses = 0; parts = [];
+  looseStreak = 0;
+  Stats.reset();
+  updateHud(); updateLives(); updateStatsPanel();
+  document.getElementById('sDot').classList.add('live');
+  document.getElementById('sTxt').textContent = 'live';
+  document.getElementById('bpmEl').textContent = '— bpm';
+  document.getElementById('regimeEl').textContent = 'slow regime';
+  running = true; bgTarget = 28;
+  nextCycle();
+}
+
+function nextCycle(){
+  if(!running) return;
+  resultLock = false; windowOpen = false;
+  cycleStart = performance.now();
+  Stats.setRegime(cycleDuration);
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(gameLoop);
+}
+
+function handleTap(){
+  if(!running || resultLock) return;
+  const now = performance.now();
+  const elapsed = now - cycleStart;
+  const t = elapsed / cycleDuration;
+
+  if(t >= 1.0){ handleResult('miss-late'); return; }
+
+  Stats.setRegime(cycleDuration);
+  const win = Stats.getWindowMs(cycleDuration);
+  const winFrac = win.size / cycleDuration;
+  const errorMs = elapsed - cycleDuration;
+
+  if(t < (1 - winFrac) - 0.06){
+    handleResult('early', errorMs);
+  } else if(t >= (1 - winFrac)){
+    Stats.add(errorMs, cycleDuration);
+    const closeness = 1 - Math.abs(errorMs) / win.size;
+    handleResult(closeness > 0.55 ? 'perfect' : 'good', errorMs);
+  } else {
+    Stats.add(errorMs, cycleDuration);
+    handleResult('early-soft', errorMs);
+  }
+}
+
+function handleResult(kind, errorMs){
+  if(resultLock) return;
+  resultLock = true;
+  cancelAnimationFrame(rafId);
+  const cx = GS / 2, cy = GS / 2;
+
+  if(kind === 'perfect' || kind === 'good'){
+    const isPerfect = kind === 'perfect';
+    const pts = isPerfect ? 3 : 1;
+    score += pts; streak++;
+    // FIX #5: strict > for personal best (tie is not a new best)
+    best = Math.max(best, score);
+    if(score > best) lsSet('pulse3_best', String(best));
+    if(isPerfect) perfects++; else goods++;
+    spawnParts(cx, cy, isPerfect ? '#a78bfa' : '#38bdf8', isPerfect ? 18 : 10, isPerfect ? 4 : 2.5);
+    spawnRing(cx, cy, isPerfect ? '#a78bfa' : '#38bdf8');
+    if(navigator.vibrate) navigator.vibrate(isPerfect ? 12 : 6);
+
+    const win = Stats.getWindowMs(cycleDuration);
+    if(win.frac < 0.09 && cycleDuration > 550){
+      looseStreak = 0;
+      cycleDuration = Math.max(450, cycleDuration - 28);
+    } else if(win.frac > 0.20){
+      looseStreak++;
+      if(looseStreak >= 3){
+        cycleDuration = Math.min(1500, cycleDuration + 20);
+        looseStreak = 0;
+      }
+      // else: hold steady
+    } else {
+      looseStreak = 0;
+      cycleDuration = Math.max(500, cycleDuration - 16);
+    }
+    bgTarget = Math.min(70, bgTarget + 6);
+    showGrade(isPerfect ? 'perfect' : 'good', isPerfect ? 'gp' : 'gg');
+    updateHud(); updateStatsPanel();
+    setTimeout(nextCycle, 210);
+
+  } else {
+    misses++;
+    streak = 0; lives--;
+    looseStreak = 0;
+    spawnParts(cx, cy, '#f43f5e', 10, 2.8);
+    spawnRing(cx, cy, 'rgba(244,63,94,0.45)');
+    if(navigator.vibrate) navigator.vibrate([8, 18, 8]);
+    shakeWrap();
+    showGrade(kind === 'early' || kind === 'early-soft' ? 'too early' : 'too late', 'gm');
+    updateHud(); updateLives(); updateStatsPanel();
+    if(lives <= 0){
+      running = false; bgTarget = 0;
+      document.getElementById('sDot').classList.remove('live');
+      document.getElementById('sTxt').textContent = 'idle';
+      setTimeout(showEnd, 480);
+    } else {
+      setTimeout(nextCycle, 460);
+    }
+  }
+}
+
+let shakeTO = null;
+function shakeWrap(){
+  const w = document.getElementById('stageWrap');
+  w.style.transform = `translate(${(Math.random() - 0.5) * 7}px, ${(Math.random() - 0.5) * 3}px)`;
+  clearTimeout(shakeTO); shakeTO = setTimeout(() => w.style.transform = '', 200);
+}
+function showGrade(txt, cls){
+  const g = document.getElementById('grade');
+  g.textContent = txt; g.className = ''; void g.offsetWidth; g.className = cls;
+}
+function updateHud(){
+  document.getElementById('scoreEl').textContent = score;
+  document.getElementById('strEl').textContent = streak;
+  document.getElementById('strEl').className = 'hv' + (streak >= 5 ? ' hot' : '');
+  document.getElementById('strLabel').style.color = streak >= 5 ? 'var(--gold)' : 'var(--dim)';
+}
+function updateLives(){
+  for(let i = 0; i < 3; i++)
+    document.getElementById('p' + i).className = 'pip' + (i >= lives ? ' dead' : '');
+}
+
+function showEnd(){
+  const ov = document.getElementById('overlay');
+  ov.classList.remove('hidden');
+  document.getElementById('ovEye').textContent = 'session complete';
+  document.getElementById('ovSub').style.display = 'none';
+  document.getElementById('ovEnd').style.display = 'block';
+  document.getElementById('ovScore').textContent = score;
+  const isNew = score > best && score > 0;
+  document.getElementById('ovBest').textContent = isNew ? '↑ new personal best' : 'best: ' + best;
+  document.getElementById('ovP').textContent = perfects;
+  document.getElementById('ovG').textContent = goods;
+  document.getElementById('ovM').textContent = misses;
+  document.getElementById('actionBtn').textContent = 'new session';
+
+  const insight = document.getElementById('ovInsight');
+  if(Stats.n >= 5){
+    const bias = Stats.bias.toFixed(0), sig = Stats.sigma_y.toFixed(2);
+    const win = Stats.getWindowMs(cycleDuration);
+    const biasText = Stats.bias < -25 ? 'You tend to tap early — try waiting for the ring to close.' :
+                     Stats.bias > 25 ? 'You tend to tap late — anticipate the beat slightly.' :
+                     'Your timing bias is well-centered.';
+    insight.innerHTML =
+      `Your model: <span class="hi">log-normal fit</span>  σ_log=${sig}<br>` +
+      `Bias=${bias}ms over ${Stats.n} samples (${Stats.currentRegime} regime).<br>` +
+      `Adaptive window: <span class="hi">≤${win.size.toFixed(0)}ms</span> ` +
+      `(${(win.frac*100).toFixed(1)}% of cycle, <span class="hi">empirical 85th pct</span>).<br>` +
+      `Variance recomputed over last ${Math.min(Stats.n,80)} samples — no drift.<br>` +
+      `Late responses treated as lapses; censored early >6% excluded.<br>` +
+      biasText;
+    insight.style.display = 'block';
+  } else {
+    insight.style.display = 'none';
+  }
+}
+
+// ── INPUT ──
+gc.addEventListener('pointerdown', e => { e.preventDefault(); if(running) handleTap(); });
+document.addEventListener('keydown', e => {
+  if(e.code === 'Space'){
+    if(e.repeat) return;
+    e.preventDefault();
+    if(running) handleTap();
+  }
+  if(e.code === 'Escape' && running){
+    running = false; bgTarget = 0;
+    setTimeout(showEnd, 200);
+  }
+});
+
+document.getElementById('actionBtn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('ovEnd').style.display = 'none';
+  document.getElementById('ovSub').style.display = 'block';
+  document.getElementById('ovEye').textContent = 'adaptive reaction timing instrument';
+  resizeAll();
+  requestAnimationFrame(() => {
+    if(GS > 0) startGame();
+    else setTimeout(() => { resizeAll(); startGame(); }, 100);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FIX #3: Sanity suite wrapped in DEV guard with backup/restore
+// FIX #4: NaN guard test exercises empirical branch (n≥10)
+// ═══════════════════════════════════════════════════════════════
+if(DEV){
+  (function test(){
+    // Backup
+    const backup = {
+      samples: Stats.samples,
+      n: Stats.n,
+      regime: Stats.currentRegime,
+      mu_y: Stats.mu_y,
+      sigma_y: Stats.sigma_y,
+      bias: Stats.bias
+    };
+
+    Stats.reset();
+
+    // Test 1: calibration window scales with cycleDuration
+    const cal = Stats.getWindowMs(1500);
+    console.assert(cal.frac === 0.22, 'calibration frac must be 0.22');
+    console.assert(Math.abs(cal.size - 330) < 0.1, 'calibration size must scale with cycle');
+
+    // Test 2: empirical window gated behind n≥10
+    for(let i = 0; i < 8; i++){
+      Stats.add(-30 - i * 2, 1500);
+    }
+    const below = Stats.getWindowMs(1500);
+    console.assert(below.frac === 0.22, 'below-threshold must stay calibration');
+
+    // Add 2 more to cross threshold
+    Stats.add(-25, 1500); Stats.add(-28, 1500);
+    const above = Stats.getWindowMs(1500);
+    console.assert(above.frac < 0.22, 'above-threshold must use empirical');
+    console.assert(above.size > 0 && above.size < 330, 'empirical size must be in bounds');
+
+    // Test 3: hysteresis dead band
+    Stats.reset();
+    Stats.currentRegime = 'slow';
+    Stats.setRegime(980);
+    console.assert(Stats.currentRegime === 'slow', 'hysteresis must prevent flicker at 980');
+    Stats.setRegime(940);
+    console.assert(Stats.currentRegime === 'fast', 'must switch to fast below 950');
+    Stats.setRegime(1020);
+    console.assert(Stats.currentRegime === 'fast', 'hysteresis must prevent flicker at 1020');
+    Stats.setRegime(1060);
+    console.assert(Stats.currentRegime === 'slow', 'must switch to slow above 1050');
+
+    // Test 4: window caching
+    Stats.reset();
+    for(let i = 0; i < 11; i++) Stats.add(-25 - Math.random()*10, 1500);
+    const w1 = Stats.getWindowMs(1500);
+    const w2 = Stats.getWindowMs(1500);
+    console.assert(w1 === w2, 'cached window must return same reference');
+
+    // Test 5: NaN guard on empirical branch (n≥10)
+    Stats.reset();
+    for(let i = 0; i < 10; i++) Stats.add(-20 - i, 1500);
+    Stats.samples[5].mag = NaN;
+    Stats.samples[5].y = NaN;
+    const guarded = Stats.getWindowMs(1500);
+    console.assert(Number.isFinite(guarded.size), 'NaN in empirical branch must not corrupt window');
+    console.assert(Number.isFinite(guarded.frac), 'NaN in empirical branch must not corrupt frac');
+
+    // Restore
+    Stats.samples = backup.samples;
+    Stats.n = backup.n;
+    Stats.currentRegime = backup.regime;
+    Stats.mu_y = backup.mu_y;
+    Stats.sigma_y = backup.sigma_y;
+    Stats.bias = backup.bias;
+    Stats._cacheWin = null;
+    Stats._cacheCd = -1;
+    Stats._cacheN = -1;
+
+    console.log('[Sanity] All DEV assertions passed.');
+  })();
+}
+
+})();
+</script>
+</body>
+</html>
